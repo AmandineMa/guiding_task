@@ -1,0 +1,126 @@
+guiding:
+  dialogue:
+    hwu: True
+    
+  immo: True
+
+  base_services:
+    get_route: 
+      name: /semantic_route_description/get_route
+      type: semantic_route_description_msgs/SemanticRoute
+    route_verbalization: 
+      name: /route_verbalization/verbalizePlace
+      type: route_verbalization_msgs/VerbalizeRegionRoute
+    get_individual_info: 
+      name: /ontologenius/individual
+      type: ontologenius_msgs/OntologeniusService
+    get_class_info: 
+      name: /ontologenius/class
+      type: ontologenius_msgs/OntologeniusService
+    look_at: 
+      name: /deictic_gestures/look_at
+      type: deictic_gestures/LookAt
+    point_at: 
+      name: /deictic_gestures/point_at
+      type: deictic_gestures/PointAt
+    has_mesh: 
+     name: /has_mesh
+     type: perspectives_msgs/HasMesh
+    pepper_synchro: 
+     name: /pepper_resources_synchronizer/state_machines_register
+     type: pepper_resources_synchronizer_msgs/MetaStateMachineRegister
+    get_uwds_name: 
+     name: /get_name
+     type: perspectives_msgs/GetName
+    localise:
+     name: /mummer_localisation_tf/localise
+     type: pepper_localisation/response
+    is_visible: 
+     name: /pointing_planner/visibility_score
+     type: pointing_planner/VisibilityScore
+    pointing_planner: 
+     name: /pointing_planner/plan
+     type: pointing_planner/PointingPlanner
+    speak_to: 
+     name: /naoqi_driver/tts/say
+     type: nao_interaction_msgs/Say
+
+  services_moving:
+    pointing_planner: 
+      name: /pointing_planner/plan
+      type: pointing_planner/PointingPlanner
+ 
+
+  services_hwu:
+    dialogue_inform: 
+      name: /rpn_supervision_server/inform
+      type: rpn_recipe_planner_msgs/SuperInform
+    dialogue_query: 
+      name: /rpn_supervision_server/query
+      type: rpn_recipe_planner_msgs/SuperQuery 
+    enable_animated_speech:
+      name: /mummer_dialogue_say/enable_animated_speech
+      type: std_srvs/SetBool
+    terminate_interaction:
+      name: /dialogue_arbiter/end_conv
+      type: std_srvs/Empty      
+    web_view_start_processing:
+      name: /web_view_node/start_processing
+      type: std_srvs/Empty
+    pause_asr:
+      name: /mummer_asr/pause
+      type: std_srvs/Empty
+       
+#  services_wo_hwu:
+#     speak_to: 
+#       name: /naoqi_driver/tts/say
+#       type: nao_interaction_msgs/Say
+
+  topics:
+    current_facts: /base/current_facts
+    point_at_status: /deictic_gestures/point_at/status
+    look_at_status: /deictic_gestures/look_at/status
+    human_to_monitor: /head_following/human_to_look
+    person_of_interest: /person_of_interest
+    look_at_events: /pepper_head_manager/str_events
+    terminate_interaction: /terminate_interaction/goal
+    finished_talking: /mummer_dialogue_say/finished
+    rating: /terminate_interaction/rating
+   
+  action_servers:
+    move_to: m_move_to
+    dialogue: dialogue_as
+    pointing_planner: /pointing_planner/SVP_Planner
+    engage: engage
+    dialogue_inform: /rpn_supervision_server/inform_srv
+    dialogue_query: /rpn_supervision_server/query_srv
+  
+  tuning_param:
+    pointing_duration: 1 #seconds
+    stop_tracking_dist_th: 0.3 #meters
+    human_move_not_visible: 0.15
+    human_move_first_dist_th: 0.5 #meters
+    robot_should_move_dist_th: 0.4 #meters
+    take_robot_place_dist_th: 0.6 #meters
+    lost_perception_timeout: 10 #seconds
+    observe_landmark_timeout: 3 #seconds
+    stop_when_human_lost: False
+    signpost: False
+    human_follow: True
+    try_no_move: False
+  
+#  robot_base:
+#    position: [27.5, 9.7, 0]
+#    orientation: [0, 0, -0.707,  0.707]
+    
+#LAAS    
+  robot_base:
+    position: [6.12, 15.7, 0]
+    orientation: [0, 0, -0.707,  0.707]
+  
+  perspective:
+    world: base
+    robot_place: pepper_infodesk
+
+  debug:
+    log_level: DEBUG

@@ -1,0 +1,12 @@
+MAS supervisor {
+
+	infrastructure: Centralised(threaded,1,1,3)
+	
+//	executionControl: jason.control.ExecutionControlGUI
+
+	agents:
+		supervisor_for_habituation_phase [verbose=1] agentArchClass arch.SupervisorAgArch beliefBaseClass agent.TimeBB;
+
+	aslSourcePath:
+		"src/asl";
+}
