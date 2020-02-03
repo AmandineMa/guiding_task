@@ -1,0 +1,111 @@
+#!/bin/sh
+#TODO: Change path in build.xml to .../jason/build/libs/jason-VERSION.jar, where VERSION is the version defined in build.gradle, adapt following paths accordingly
+PROJECT_PATH=$PWD
+
+echo 'Running pre-commit hook' 
+
+	read -r -p "Do you want to commit without building and without jar files? [y/N] " response < /dev/tty
+	case "$response" in
+	    [yY][eE][sS]|[yY]) 
+		echo "Validate commit"
+		exit 0
+		;;
+	    *)
+		echo "Continuing"
+		;;
+	esac
+
+
+if [ ! -d $JASON_PROJECT ]
+then 
+	echo "Directory $JASON_PROJECT does not exist, aborting commit"
+	exit 1
+fi
+
+if [ ! -d $PROJECT_PATH ]
+then 
+	echo "Directory $PROJECT_PATH does not exist, aborting commit"
+	exit 1
+fi
+
+echo "Building Jason jar"
+cd $JASON_PROJECT
+gradle build
+
+if [ $? -ne 0 ]
+then
+	echo "Gradle build failed"
+	if [ ! -f "$JASON_JAR" ]
+	then
+		echo "Jar $JASON_JAR does not exist, aborting commit"
+		exit 1
+	fi
+	read -r -p "Jason build failed, do you want to continue with preexisting jason jar file? [y/N] " response < /dev/tty
+	case "$response" in
+	    [yY][eE][sS]|[yY]) 
+		echo "Continue using preexisting $JASON_JAR"
+		;;
+	    *)
+		echo "Aborting commit"
+		exit 1
+		;;
+	esac
+fi
+
+echo "Building rjs jar"
+cd "$RJS_HOME/bin"
+ant jar
+
+if [ $? -ne 0 ]
+then
+	read -r -p "Ant jar failed, do you want to commit without jar? [y/N] " response < /dev/tty
+	case "$response" in
+	    [yY][eE][sS]|[yY]) 
+		echo "Validate commit"
+		exit 0
+		;;
+	    *)
+		echo "Aborting commit"
+		exit 1
+		;;
+	esac
+fi
+cd "$RJS_HOME"
+if [ ! -f "$RJS_HOME/${PWD##*/}.jar" ]
+then
+	echo "Jarrr $RJS_HOME/${PWD##*/}.jar does not exist, aborting commit"
+	exit 1
+fi
+
+
+echo "Building project jar"
+cd "$PROJECT_PATH/bin"
+ant jar
+
+if [ $? -ne 0 ]
+then
+	read -r -p "Ant jar failed, do you want to commit without jar? [y/N] " response < /dev/tty
+	case "$response" in
+	    [yY][eE][sS]|[yY]) 
+		echo "Validate commit"
+		exit 0
+		;;
+	    *)
+		echo "Aborting commit"
+		exit 1
+		;;
+	esac
+fi
+cd "$PROJECT_PATH"
+if [ ! -f "$PROJECT_PATH/${PWD##*/}.jar" ]
+then
+	echo "Jar $PROJECT_PATH/${PWD##*/}.jar does not exist, aborting commit"
+	exit 1
+fi
+
+echo "Adding project jar file to commit"
+cd "$PROJECT_PATH"
+git add "${PWD##*/}.jar"
+
+echo "Validate commit"
+exit 0
