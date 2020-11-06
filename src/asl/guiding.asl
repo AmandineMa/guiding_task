@@ -151,22 +151,25 @@ landmark_to_see(Ld) :- (target_to_point(T) & T == Ld) | (dir_to_point(D) & D == 
 		!check_dist(ID, HTF, Point, Dist, Bool);
 	}.
 	
--!check_dist(ID, HTF, Point, Dist, Bool) : not adjust <- 
+-!check_dist(ID, HTF, Point, Dist, Bool) : not adjust & isPerceiving("0") <- 
 	?human_first(Side);
 	!repeat_move(ID, HTF, Point, Dist, Bool, Side).
+	
+-!check_dist(ID, HTF, Point, Dist, Bool) : not adjust & not isPerceiving("0") <- 
+	true.
 	
 -!check_dist(ID, HTF, Point, Dist, Bool) : adjust <- 
 	!repeat_move(ID, HTF, Point, Dist, Bool).	
 	
-@rm[max_attempts(2)]+!repeat_move(ID, HTF, Point, Dist, Bool, Side) : true <-
+@rm[max_attempts(3)]+!repeat_move(ID, HTF, Point, Dist, Bool, Side) : true <-
 	!speak(ID, step(Side));
 	rjs.jia.reset_att_counter(check_dist);
 	!check_dist(ID, HTF, Point, Dist, Bool).
 	
-@rm2[max_attempts(2)]+!repeat_move(ID, HTF, Point, Dist, Bool) : true <-
+@rm2[max_attempts(3)]+!repeat_move(ID, HTF, Point, Dist, Bool) : true <-
 	!speak(ID, closer);
-	rjs.jia.reset_att_counter(check_dist);
-	!check_dist(ID, HTF, Point, Dist, Bool).
+	rjs.jia.reset_att_counter(check_dist).
+//	!check_dist(ID, HTF, Point, Dist, Bool).
 	
 -!repeat_move(ID, HTF, Point, Dist, Bool, Side) : true <- 
 	!speak(ID, cannot_move); 
@@ -196,7 +199,7 @@ landmark_to_see(Ld) :- (target_to_point(T) & T == Ld) | (dir_to_point(D) & D == 
 		!log_failure(ID, be_at_good_pos, Failure, Code);
 	}.
  
-@wh[max_attempts(3)]+!wait_human(ID) : true <- 
+@wh[max_attempts(4)]+!wait_human(ID) : true <- 
 	+wait_human;
 	human_to_monitor("");
 	?task(ID, guiding, Human, _);
@@ -259,7 +262,7 @@ landmark_to_see(Ld) :- (target_to_point(T) & T == Ld) | (dir_to_point(D) & D == 
 					+visible(direction, D, false, N+1)[ID];
 				}
 				!adjust_human_pos(ID, Human);
-//				!check_pos(ID, Human);
+				!check_pos(ID, Human);
 			}
 		}elif(.substring(Result, true) & rjs.jia.believes(target_to_point(_))){
 			?target_to_point(T);
@@ -272,7 +275,7 @@ landmark_to_see(Ld) :- (target_to_point(T) & T == Ld) | (dir_to_point(D) & D == 
 					+visible(target, T, false, N+1)[ID];
 				}
 				!adjust_human_pos(ID, Human);
-//				!check_pos(ID, Human);
+				!check_pos(ID, Human);
 			}
 		}
 	}else{
@@ -507,7 +510,9 @@ landmark_to_see(Ld) :- (target_to_point(T) & T == Ld) | (dir_to_point(D) & D == 
  	}elif(rjs.jia.believes(direction(Ld))){
  		+direction_verba[ID];
  	};
-	point_at(Ld,false,true);
+ 	point_at(Ld,false,true);
+ 	// modif speciale drone arena
+	// point_at("IKEAShelf_bb",false,true);
 	.wait(point_at(point),10000);
 	-point_at(point);
 	jia.robot.get_param("/guiding/dialogue/hwu", "Boolean", Dialogue);
@@ -519,7 +524,7 @@ landmark_to_see(Ld) :- (target_to_point(T) & T == Ld) | (dir_to_point(D) & D == 
 -!point_look_at(ID, Ld)[Failure, code(Code),code_line(_),code_src(_),error(Error),error_msg(_)] : true <-
 	?task(ID, guiding, Human, _);
 	if(.substring(test_goal_failed, Error) |  .substring(point_at(finished),Code)){
-		!ask_seen(ID,Ld);
+//		!ask_seen(ID,Ld);
 	}elif(.substring(Error,max_attempts)){
 		!speak(ID,pl_sorry); 
 		rjs.jia.reset_att_counter(point_look_at);
@@ -591,6 +596,8 @@ landmark_to_see(Ld) :- (target_to_point(T) & T == Ld) | (dir_to_point(D) & D == 
 	?task(ID, guiding, Human, _);
 	?verba_name(Place, Name);
 	!speak(ID, not_visible_target(Name)).
+//	// modif speciale drone arena
+//	!speak(ID, visible_target(Name)).
 
 +!verbalization(ID, Place) : ( direction(D) & Place == D & dir_to_point(D)) | (target_to_point(T) & T == Place & not direction(_)) <-
 	?task(ID, guiding, Human, _);

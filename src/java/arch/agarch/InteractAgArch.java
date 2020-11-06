@@ -71,7 +71,7 @@ public class InteractAgArch extends AgArchGuiding {
 	public void init() {
 //		attentive_ratio_test();
 		super.init();
-		display.setVisible(true);
+		display.setVisible(false);
 
 		MessageListener<TerminateInteractionActionGoal> terminate_interac = new MessageListener<TerminateInteractionActionGoal>() {
 			public void onNewMessage(TerminateInteractionActionGoal msg) {
@@ -122,7 +122,7 @@ public class InteractAgArch extends AgArchGuiding {
 		
 		if(!contains("overBy(_)") && contains("inSession(_,_)")){
 			if(first) {
-				display.insert_discontinuity("session", getRosTimeMilliSeconds());
+//				display.insert_discontinuity("session", getRosTimeMilliSeconds());
 				first = false;
 			}
 			
@@ -133,7 +133,7 @@ public class InteractAgArch extends AgArchGuiding {
 				Literal l = it.next();
 				session_id = l.getTerm(1).toString();
 				sessionStartTime = ((NumberTermImpl)((Literal) l.getAnnots("add_time").get(0)).getTerm(0)).solve();
-				sessionDuration = QoI.logaFormula(getRosTimeSeconds() - sessionStartTime/1000.0, 150, 1.5);
+				sessionDuration = QoI.logaFormula0To1(getRosTimeSeconds() - sessionStartTime/1000.0, 150, 1.5);
 			}
 
 			
@@ -155,9 +155,9 @@ public class InteractAgArch extends AgArchGuiding {
 			Literal qoi_chat_bot = null;
 			if(!contains("inTaskWith(_,_)")) {
 				if(startChat) {
-					display.insert_discontinuity("task", getRosTimeMilliSeconds());
+//					display.insert_discontinuity("task", getRosTimeMilliSeconds());
 //					startChat = false;
-					display.setNoOngoingStep();
+//					display.setNoOngoingStep();
 				}
 				double startTime = sessionStartTime;
 				if(contains("endTask(_,_)")) {
@@ -166,7 +166,7 @@ public class InteractAgArch extends AgArchGuiding {
 				}
 				double ar = attentive_ratio(startTime, getRosTimeMilliSeconds());
 				qoi_chat_bot = literal("qoi_task","chat_bot",QoI.normaFormulaMinus1To1(ar, 0, 1));
-				logger.info(qoi_chat_bot.toString());
+//				logger.info(qoi_chat_bot.toString());
 				sessionsQoI.get(session_id).add(qoi_chat_bot);
 				
 				nbChatBotQoI++;
@@ -183,13 +183,13 @@ public class InteractAgArch extends AgArchGuiding {
 					c++;
 					it.next();
 				}
-				taskNumber = QoI.logaFormula(c, 1, 2);
+				taskNumber = QoI.logaFormula0To1(c, 1, 2);
 				
-				double d;
-				if(l.getTerm(1).isArithExpr())
-					d = ((NumberTermImpl) ((ArithExpr) l.getTerm(1)).getLHS()).solve();
-				else
-					d = ((NumberTermImpl) l.getTerm(1)).solve();
+				double d=0;
+//				if(l.getTerm(1).isArithExpr())
+//					d = ((NumberTermImpl) ((ArithExpr) l.getTerm(1)).getLHS()).solve();
+//				else
+//					d = ((NumberTermImpl) l.getTerm(1)).solve();
 				taskLevQoI = ( d + chatBotQoIAverage ) / 2.0 ;
 				qoi_values.add(taskLevQoI);
 			} else {
@@ -218,11 +218,11 @@ public class InteractAgArch extends AgArchGuiding {
 			sessionsQoI.get(session_id).add(literal("task_QoI", session_id, taskLevQoI));
 			Literal qoi_l = literal("qoi",session_id, QoI);
 			sessionsQoI.get(session_id).add(qoi_l);			
-			display.update(qoi_l,qoi_chat_bot,null );
-			if(startChat && !contains("inTaskWith(_,_)")) {
-				startChat = false;
-				display.add_label("chat", qoi_chat_bot);
-			}
+//			display.update(qoi_l,qoi_chat_bot,null );
+//			if(startChat && !contains("inTaskWith(_,_)")) {
+//				startChat = false;
+//				display.add_label("chat", qoi_chat_bot);
+//			}
 		} else {
 			first = true;
 		}

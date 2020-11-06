@@ -1,10 +1,15 @@
 package arch.agarch;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.ros.message.MessageListener;
@@ -23,6 +28,7 @@ import jason.asSyntax.NumberTermImpl;
 import rjs.utils.QoI;
 import rjs.utils.Tools;
 import ros.RosNodeGuiding;
+import std_msgs.Float64;
 
 public class RobotAgArch extends AgArchGuiding {
 
@@ -34,7 +40,7 @@ public class RobotAgArch extends AgArchGuiding {
 	double startTimeOngoingStep = -1;
 	HashMap<String,Double> actionsThreshold = new HashMap<String,Double>() {{
         put("speak", 10000.0);
-        put("question", 15000.0);
+        put("question", 8000.0);
         put("robot_move", 20000.0);
         put("come_closer", 30000.0);
         put("step", 20000.0);
@@ -44,8 +50,9 @@ public class RobotAgArch extends AgArchGuiding {
         put("person_abilities", 15000.0);
         put("agents_at_right_place", 30000.0);
         put("target_explanation", 20000.0);
-        put("direction_explanation", 35000.0);
-        put("landmark_seen", 20000.0);
+        put("direction_explanation", 30000.0);
+        put("ask_landmark_seen", 20000.0);
+        put("ask_understood", 20000.0);
     }};
 	
 	String onGoingAction = "";
@@ -59,7 +66,7 @@ public class RobotAgArch extends AgArchGuiding {
 	double onTimeTaskExecution = 1;
 	double onTimeTaskExecutionPrev = 1;
 	double distToGoal = 0;
-	double decreasingSpeed = 2;
+	double decreasingSpeed = 1.5;
 	float step = 0;
 	ArrayList<Double> currentTaskActQoI = new ArrayList<Double>();
 	private final ReadWriteLock startActionLock = new ReentrantReadWriteLock();
@@ -68,6 +75,7 @@ public class RobotAgArch extends AgArchGuiding {
 	double taskQoIAverage = 0;
 	double nbTaskQoI = 0;
 	boolean firstTimeInTask = true;
+	Double prevTime = 0.0;
 	double monitorTimeAnswering = 0;
 	boolean wasComingCloser = false;
 	boolean wasStepping = false;
@@ -75,9 +83,23 @@ public class RobotAgArch extends AgArchGuiding {
 	boolean wasWaiting = false;
 	boolean newStep = false;
 	boolean startAction = false;
+	Double firstTtg = Double.MAX_VALUE;
+	Double ttg = Double.MAX_VALUE;
+	double moveStarted = 0;
+	Double countDistComeCloser = 0.0;
+	Double prevDistComeCloser = Double.MAX_VALUE;
+	Double prevDistStep = Double.MAX_VALUE;
+	Double countDistStep = 0.0;
+	FileWriter fw_task;
+	BufferedWriter bw_task;
+	FileWriter fw_action;
+	BufferedWriter bw_action;
+	public PrintWriter out_task;
+	public PrintWriter out_action;
 
 	@Override
 	public void init() {
+		logger.setLevel(Level.OFF);
 
 		MessageListener<PointAtStatus> ml_point_at = new MessageListener<PointAtStatus>() {
 			public void onNewMessage(PointAtStatus status) {
@@ -129,13 +151,44 @@ public class RobotAgArch extends AgArchGuiding {
 		};
 		rosnode.addListener("guiding/topics/look_at_status", LookAtStatus._TYPE, ml_look_at);
 		
+
+		MessageListener<Float64> ml_ttg = new MessageListener<Float64>()  {
+			public void onNewMessage(Float64 n) {
+				if(firstTtg.equals(Double.MAX_VALUE)) {
+					firstTtg = n.getData();
+					moveStarted = getCurrentTime();
+				}
+				ttg = n.getData();
+
+			}
+		};
+		rosnode.addListener("guiding/topics/ttg", Float64._TYPE, ml_ttg);
+		
+		
+		try {
+			fw_task = new FileWriter("log/qoi/task.txt", true);
+			fw_action = new FileWriter("log/qoi/action.txt", true);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	    bw_task = new BufferedWriter(fw_task);
+	    bw_action = new BufferedWriter(fw_action);
+	    out_task = new PrintWriter(bw_task);
+	    out_action = new PrintWriter(bw_action);
 		super.init();
 	}
+	
 
 	@Override
 	public void reasoningCycleStarting() {
 		Literal onGoingTask = findBel("started");
-		if(!onGoingStep.isEmpty() && onGoingTask != null) {
+		double t = getCurrentTime();
+		logger.info("current time :"+t);
+		logger.info("prev time :"+prevTime);
+		double diff = (t-prevTime)/1000;
+		logger.info("diff time :"+diff);
+		if(!onGoingStep.isEmpty() && onGoingTask != null && diff >= 0.8) {
 			if(firstTimeInTask) {
 				display.insert_discontinuity("task", getRosTimeMilliSeconds());
 				firstTimeInTask = false;
@@ -161,7 +214,7 @@ public class RobotAgArch extends AgArchGuiding {
 				double ar = ((InteractAgArch) interact_arch).attentive_ratio(startTimeOngoingAction, getRosTimeMilliSeconds());
 				startActionLock.readLock().unlock();
 				attentive_ratio = literal("attentive_ratio",onGoingAction,QoI.normaFormulaMinus1To1(ar, 0, 1));
-//				logger.info(attentive_ratio.toString());
+				logger.info("attentive ratio :"+attentive_ratio.toString());
 				actionsQoI.get(id).add(attentive_ratio);
 				list.add(attentive_ratio);
 			} else {
@@ -171,19 +224,25 @@ public class RobotAgArch extends AgArchGuiding {
 			// action expectations
 			// questions
 			if((inQuestion || humanAnswer != 0) && !onGoingAction.equals("")) {
-				if(humanAnswer == 0)
-					monitorTimeAnswering = Math.max(-Math.max(getRosTimeMilliSeconds() - startTimeOngoingAction - actionsThreshold.get(onGoingAction), 0)
-																/ (actionsThreshold.get(onGoingAction) * decreasingSpeed) + 1 , -1);	
-//				else if(attentive_ratio == null)  {
-//					attentive_ratio = findBel(Literal.parseLiteral("attentive_ratio("+onGoingAction+",_)"), this.actionsQoI.get(id));
-//					actionsQoI.get(id).add(attentive_ratio);
-//					list.add(attentive_ratio);
-//				}
-					
-				action_expectation = literal("action_expectation", onGoingAction,monitorTimeAnswering);
-//				logger.info(action_expectation.toString());
-				actionsQoI.get(id).add(action_expectation);
-				list.add(action_expectation);
+//				double questionDuration = getRosTimeMilliSeconds() - startTimeOngoingAction;
+//				if(humanAnswer == 0)
+//					monitorTimeAnswering = Math.max(-Math.max(questionDuration - actionsThreshold.get(onGoingAction), 0)
+//																/ (actionsThreshold.get(onGoingAction) * decreasingSpeed) + 1 , -1);	
+				//TODO corriger: n est jamais reinitialisé
+				Literal not_exp_ans = findBel("not_exp_ans(_)");
+				double c = 0;
+				if(not_exp_ans != null) {
+					c = ((NumberTermImpl) not_exp_ans.getTerm(0)).solve()+1;
+				}
+				action_efficiency = literal("action_efficiency","question",QoI.normaFormulaMinus1To1(c, 3, 0));
+				logger.info("question action efficiency :"+action_efficiency.toString());
+				actionsQoI.get(id).add(action_efficiency);
+				list.add(action_efficiency);
+				
+//				action_expectation = literal("action_expectation", onGoingAction,monitorTimeAnswering);
+//				logger.info("question action expectation :"+action_expectation.toString());
+//				actionsQoI.get(id).add(action_expectation);
+//				list.add(action_expectation);
 			} else {
 				
 				Literal come_front = findBel("wait_human");
@@ -196,7 +255,7 @@ public class RobotAgArch extends AgArchGuiding {
 					if(said != null) {
 						c = ((NumberTermImpl) said.getTerm(1)).solve();
 					}
-					action_efficiency = literal("action_efficiency","come_front",QoI.logaFormula(c, 2, 2) * (-1));
+					action_efficiency = literal("action_efficiency","come_front",QoI.normaFormulaMinus1To1(c, 3, 0));
 					actionsQoI.get(id).add(action_efficiency);
 					list.add(action_efficiency);
 //					logger.info(action_efficiency.toString());
@@ -216,39 +275,27 @@ public class RobotAgArch extends AgArchGuiding {
 					Literal closer = findBel("adjust");
 					if(closer != null) {
 						onGoingAction = "come_closer";
-						// attentive ratio
-						double startTime = ((NumberTermImpl) closer.getAnnot("add_time").getTerm(0)).solve();
-						double ar = ((InteractAgArch) interact_arch).attentive_ratio(startTime, getRosTimeMilliSeconds());
-						attentive_ratio = literal("attentive_ratio","come_closer",QoI.normaFormulaMinus1To1(ar, 0, 1));
-						list.add(attentive_ratio);
-						actionsQoI.get(id).add(attentive_ratio);
-//						logger.info(attentive_ratio.toString());
-						// action expectations
 						Literal distToGoal = findBel("dist_to_goal(_,_,_)");
 						if(distToGoal != null) {
-//							logger.info(distToGoal.toString());
+							ArrayList<Double> goal = Tools.listTermNumbers_to_list((ListTermImpl) distToGoal.getTerm(2));
 							Transform human_pose_now = getTfTree().lookupMostRecent("map", distToGoal.getTerm(0).toString().replaceAll("^\"|\"$", ""));
-							ArrayList<Double> init_pose = Tools.listTermNumbers_to_list((ListTermImpl) distToGoal.getTerm(1));
-//							logger.info("init pose :"+init_pose);
-							if(human_pose_now != null) {
-								double h_dist_to_init_pose = Math.hypot(human_pose_now.translation.x - init_pose.get(0), 
-										human_pose_now.translation.y - init_pose.get(1));
-//								logger.info("dist from initial pose :"+h_dist_to_init_pose);
-								ArrayList<Double> goal = Tools.listTermNumbers_to_list((ListTermImpl) distToGoal.getTerm(2));
-								double init_dist_to_goal = Math.hypot(init_pose.get(0) - goal.get(0), 
-										init_pose.get(1) - goal.get(1));
-//								logger.info("initial dist to goal "+init_dist_to_goal);
-								double h_dist_to_goal = Math.hypot(human_pose_now.translation.x - goal.get(0), 
-										human_pose_now.translation.y - goal.get(1));
-//								logger.info("dist to goal "+h_dist_to_goal);
-								double ratio = h_dist_to_init_pose/init_dist_to_goal;
-								if(h_dist_to_goal > init_dist_to_goal)
-									ratio = -1 * ratio;
-								action_expectation = literal("action_expectation","come_closer",ratio);
-								actionsQoI.get(id).add(action_expectation);
-								list.add(action_expectation);
-//								logger.info(action_expectation.toString());
+							double distComeCloser = Math.hypot(human_pose_now.translation.x - goal.get(0), 
+									human_pose_now.translation.y - goal.get(1));
+							logger.info("dist now :"+distComeCloser);
+							logger.info("dist prev :"+prevDistComeCloser);
+							if((Math.abs(prevDistComeCloser - distComeCloser) > 0.1 && prevDistComeCloser > distComeCloser)  || prevDistComeCloser.equals(Double.MAX_VALUE)) {
+								logger.info("pos");
+								if(countDistComeCloser > 0)
+									countDistComeCloser += -1;
+							}else {
+								countDistComeCloser += 1;
+								logger.info("neg");
 							}
+							prevDistComeCloser = distComeCloser;
+							action_expectation = literal("action_expectation","come_closer",QoI.logaFormulaMinus1To1(countDistComeCloser, 5, 1.5) * (-1));
+							actionsQoI.get(id).add(action_expectation);
+							list.add(action_expectation);
+							
 						}
 
 						// action efficiency
@@ -257,14 +304,18 @@ public class RobotAgArch extends AgArchGuiding {
 						if(said != null) {
 							c = ((NumberTermImpl) said.getTerm(1)).solve();
 						}
-						action_efficiency = literal("action_efficiency","come_closer",QoI.logaFormula(c, 2, 2) * (-1));
+						action_efficiency = literal("action_efficiency","come_closer",QoI.normaFormulaMinus1To1(c, 3, 0)); 
 						actionsQoI.get(id).add(action_efficiency);
 						list.add(action_efficiency);
-//						logger.info(action_efficiency.toString());
-						if(!wasComingCloser)
+						logger.info(action_efficiency.toString());
+						if(!wasComingCloser) {
 							startAction = true;
+							logger.info("start action");
+						}
 						wasComingCloser = true;
-					} else if(wasComingCloser) {
+					} 
+					else if(wasComingCloser) {
+						logger.info("insert discontinuity");
 						display.insert_discontinuity("action", getRosTimeMilliSeconds());
 						wasComingCloser = false;
 					}
@@ -275,34 +326,34 @@ public class RobotAgArch extends AgArchGuiding {
 						
 						onGoingAction = "step";
 						// attentive ratio
-						double startTime = ((NumberTermImpl) step.getAnnot("add_time").getTerm(0)).solve();
-						double ar = ((InteractAgArch) interact_arch).attentive_ratio(startTime, getRosTimeMilliSeconds());
-						attentive_ratio = literal("attentive_ratio","step",QoI.normaFormulaMinus1To1(ar, 0, 1));
-						actionsQoI.get(id).add(attentive_ratio);
-						list.add(attentive_ratio);
+//						double startTime = ((NumberTermImpl) step.getAnnot("add_time").getTerm(0)).solve();
+//						double ar = ((InteractAgArch) interact_arch).attentive_ratio(startTime, getRosTimeMilliSeconds());
+//						attentive_ratio = literal("attentive_ratio","step",QoI.normaFormulaMinus1To1(ar, 0, 1));
+//						actionsQoI.get(id).add(attentive_ratio);
+//						list.add(attentive_ratio);
 
 						// action expectations
 						Literal distToGoal = findBel("dist_to_goal(_,_,_)");
 						if(distToGoal != null) {
+							ArrayList<Double> goal = Tools.listTermNumbers_to_list((ListTermImpl) distToGoal.getTerm(2));
 							Transform human_pose_now = getTfTree().lookupMostRecent("map", distToGoal.getTerm(0).toString().replaceAll("^\"|\"$", ""));
-							ArrayList<Double> init_pose = Tools.listTermNumbers_to_list((ListTermImpl) distToGoal.getTerm(1));
-							ArrayList<Double> robot_place = Tools.listTermNumbers_to_list((ListTermImpl) distToGoal.getTerm(2));
-
-							double h_init_pose_dist_to_robot_place = Math.hypot(robot_place.get(0) - init_pose.get(0), 
-									robot_place.get(1) - init_pose.get(1));
-
-							double dist_threshold = rosnode.getParameters().getDouble("guiding/tuning_param/human_move_first_dist_th");
-							double h_dist_to_robot_place = Math.hypot(human_pose_now.translation.x - robot_place.get(0), 
-									human_pose_now.translation.y - robot_place.get(1));
-							double value;
-							if(h_dist_to_robot_place > h_init_pose_dist_to_robot_place) {
-								value = QoI.normaFormul0To1(h_dist_to_robot_place, h_init_pose_dist_to_robot_place, dist_threshold);
-							} else {
-								value = QoI.normaFormulaMinus1To0(h_dist_to_robot_place, 0, h_init_pose_dist_to_robot_place);
+							double distStep = Math.hypot(human_pose_now.translation.x - goal.get(0), 
+									human_pose_now.translation.y - goal.get(1));
+							logger.info("dist now :"+distStep);
+							logger.info("dist prev :"+prevDistStep);
+							if((Math.abs(prevDistStep - distStep) > 0.1 && prevDistStep < distStep)  || prevDistStep.equals(Double.MAX_VALUE)) {
+								logger.info("pos");
+								if(countDistStep > 0)
+									countDistStep += -1;
+							}else {
+								countDistStep += 1;
+								logger.info("neg");
 							}
-							action_expectation = literal("action_expectation","step",value);
-							actionsQoI.get(id).add(action_expectation);	
+							prevDistStep = distStep;
+							action_expectation = literal("action_expectation","step",QoI.logaFormulaMinus1To1(countDistStep, 5, 1.5) * (-1));
+							actionsQoI.get(id).add(action_expectation);
 							list.add(action_expectation);
+							
 							if(!wasStepping)
 								startAction = true;
 							wasStepping = true;
@@ -314,10 +365,11 @@ public class RobotAgArch extends AgArchGuiding {
 						if(said != null) {
 							c = ((NumberTermImpl) said.getTerm(1)).solve();
 						}
-						action_efficiency = literal("action_efficiency","step",QoI.logaFormula(c, 2, 2) * (-1));
+						action_efficiency = literal("action_efficiency","step",QoI.normaFormulaMinus1To1(c, 3, 0));
 						actionsQoI.get(id).add(action_efficiency);
 						list.add(action_efficiency);
-					}  else if(wasStepping) {
+					} 
+					else if(wasStepping) {
 						display.insert_discontinuity("action", getRosTimeMilliSeconds());
 						wasStepping = false;
 					}
@@ -327,46 +379,25 @@ public class RobotAgArch extends AgArchGuiding {
 					Literal move_over = findBel("move(over)");
 					if(move != null && move_over == null) {
 						onGoingAction = "robot_move";
-//						logger.info("move(started) found");
+						logger.info("move(started) found");
 						// action expectations
-						Literal distToGoal = findBel("dist_to_goal(_,_,_)");
-						if(distToGoal != null) {
-//							logger.info("dist_to_goal found");
-							Literal robot_move_l = findBel("robot_move(_,_,_)");
-							ArrayList<Double> robot_pose = null;
-							if(robot_move_l != null) {
-//								logger.info("robot_move found");
-								robot_pose = Tools.listTermNumbers_to_list((ListTermImpl) robot_move_l.getTerm(1));
-							}
-							if(robot_pose != null) {
-								TransformTree tfTree = getTfTree();
-								Transform robot_pose_now;
-								robot_pose_now = tfTree.lookupMostRecent("map", "base_footprint");
-								if(robot_pose_now != null) {
-									
-									ArrayList<Double> init_pose = Tools.listTermNumbers_to_list((ListTermImpl) distToGoal.getTerm(1));
-
-									double r_dist_to_init_pose = Math.hypot(robot_pose_now.translation.x - init_pose.get(0), 
-											robot_pose_now.translation.y - init_pose.get(1));
-
-									ArrayList<Double> goal = Tools.listTermNumbers_to_list((ListTermImpl) distToGoal.getTerm(2));
-									double init_dist_to_goal = Math.hypot(init_pose.get(0) - goal.get(0), 
-											init_pose.get(1) - goal.get(1));
-									double r_dist_to_goal = Math.hypot(robot_pose_now.translation.x - goal.get(0), 
-											robot_pose_now.translation.y - goal.get(1));
-									double ratio = r_dist_to_init_pose/init_dist_to_goal;
-									if(r_dist_to_goal > init_dist_to_goal)
-										ratio = -1 * ratio;
-									action_expectation = literal("action_expectation","robot_move",ratio);
-									actionsQoI.get(id).add(action_expectation);
-									list.add(action_expectation);
-//									logger.info(action_expectation.toString());
-									if(!wasMoving)
-										startAction = true;
-									wasMoving = true;
-								}
-							}
-							
+						
+						if(ttg != Double.MAX_VALUE) {
+							logger.info("dist to goal :"+ttg);
+							double moveDuration = ( getCurrentTime() - moveStarted) / 1000;
+							logger.info("move duration :"+moveDuration);
+							double deltaTtg = moveDuration + ttg - firstTtg;
+							logger.info("first ttg :"+firstTtg);
+							logger.info("delta :"+deltaTtg);
+							if(deltaTtg < 0)
+								deltaTtg = 0;
+							action_expectation = literal("action_expectation","robot_move",QoI.logaFormulaMinus1To1(deltaTtg, 5, 1.5) * (-1));
+							actionsQoI.get(id).add(action_expectation);
+							list.add(action_expectation);
+//							logger.info(action_expectation.toString());
+							if(!wasMoving)
+								startAction = true;
+							wasMoving = true;
 						}
 						
 					} else if(wasMoving) {
@@ -382,6 +413,7 @@ public class RobotAgArch extends AgArchGuiding {
 			double actionsQoIAverage = 0;
 			Literal la = null;
 			if(!list.isEmpty()) {
+				logger.info("list size :"+list.size());
 				double QoI = sum/list.size();
 				la = literal("qoi",onGoingAction, QoI);
 				this.actionsQoI.get(id).add(la);
@@ -390,7 +422,7 @@ public class RobotAgArch extends AgArchGuiding {
 			actionsQoIAverage = currentTaskActQoI.stream().mapToDouble(val -> val).average().orElse(0.0);
 			if(!currentTaskActQoI.isEmpty()) {
 				tasksQoI.get(id).add(literal("actionsQoI",id,actionsQoIAverage));
-//				logger.info("actions qoi average :"+actionsQoIAverage);
+				logger.info("actions qoi average :"+actionsQoIAverage);
 			}
 			// QoI task - distance to goal and task evolution
 			
@@ -402,7 +434,12 @@ public class RobotAgArch extends AgArchGuiding {
 			tasksQoI.get(id).add(literal("taskExecutionEvolution",id,onTimeTaskExecution));
 //			logger.info("dist to goal :"+distToGoal);
 //			logger.info("taskExecutionEvolution :"+onTimeTaskExecution);
-			Literal lt = literal("qoi",id,(actionsQoIAverage+distToGoal+onTimeTaskExecution)/3.0);
+//			Literal lt = literal("qoi",id,(2*actionsQoIAverage+distToGoal+2*onTimeTaskExecution)/5.0);
+			Literal lt ;
+			if(!currentTaskActQoI.isEmpty())
+				lt = literal("qoi",id,(3*actionsQoIAverage+onTimeTaskExecution)/4.0);
+			else
+				lt = literal("qoi",id,onTimeTaskExecution);
 			tasksQoI.get(id).add(lt);
 				
 //			logger.info(lt.toString());
@@ -417,9 +454,14 @@ public class RobotAgArch extends AgArchGuiding {
 			}
 			if(startAction && la != null) {
 				startAction = false;
-//				logger.info("start action to false");
+				logger.info("start action to false");
 				display.add_label(onGoingAction, la);
 			}
+			
+	    	out_task.println(lt.getAnnot("add_time").getTerm(0).toString()+";"+lt.getTerm(1).toString());
+	    	if(la != null)
+	    		out_action.println(la.getAnnot("add_time").getTerm(0).toString()+";"+la.getTerm(1).toString()+";"+la.getTerm(0).toString());
+	    	
 //			logger.info(tasksQoI.get(id).toString());
 //			logger.info(this.actionsQoI.get(id).toString());
 			nbTaskQoI++;
@@ -430,12 +472,14 @@ public class RobotAgArch extends AgArchGuiding {
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
+			prevTime = getCurrentTime();
 		}
 
-
-
+		
 		super.reasoningCycleStarting();
 	}
+	
+	
 
 	@Override
 	public void actionExecuted(ActionExec act) {
@@ -473,13 +517,15 @@ public class RobotAgArch extends AgArchGuiding {
 
 	public void increment_step() {
 		step += 1;
+		logger.info("achieved step "+this.step+" over "+steps);
+		
+		
 	}
 	
 	public void set_on_going_step(String step) {
 		onGoingStep = step;
 		display.setOngoingStep(step);
-//		logger.info("------------------------------------------"+step+"-----------------------------");
-//		logger.info("step "+this.step+" over "+steps);
+		logger.info("------------------------------------------ new step : "+step+"-----------------------------");
 		newStep = true;
 		onTimeTaskExecutionPrev = onTimeTaskExecution;
 		startTimeOngoingStep = getRosTimeMilliSeconds();
@@ -503,6 +549,12 @@ public class RobotAgArch extends AgArchGuiding {
 		wasComingCloser = false;
 		onTimeTaskExecution = 1;
 		onTimeTaskExecutionPrev = 1;
+		firstTtg = Double.MAX_VALUE;
+		ttg = Double.MAX_VALUE;
+		prevDistComeCloser = Double.MAX_VALUE;
+		countDistComeCloser = 0.0;
+		prevDistStep = Double.MAX_VALUE;
+		countDistStep = 0.0;
 	}
 	
 	public void startAction(boolean isQuestion) {
@@ -515,12 +567,17 @@ public class RobotAgArch extends AgArchGuiding {
 		startAction = true;
 	}
 	
+	public void setStartTimeAction() {
+		startTimeOngoingAction = getRosTimeMilliSeconds();
+	}
+	
 	public void endAction() {
 		startActionLock.writeLock().lock();
 		startTimeOngoingAction = -1;
 		startActionLock.writeLock().unlock();
 //		logger.info("insert discontinuity");
 		display.insert_discontinuity("action", getRosTimeMilliSeconds());
+		
 	}
 	
 	public LinkedList<Literal> getTaskQoI(String id) {

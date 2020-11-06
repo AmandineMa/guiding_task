@@ -6,7 +6,7 @@
 !start.
 
 ^!guiding(ID, Human, Place)[state(started)] : not started[ID] <- 
-	pause_asr_and_display_processing;
+//	pause_asr_and_display_processing;
 	.send(interac, tell, inTaskWith(Human,ID)); 
 	+started[ID]; 
 	+monitoring(ID, Human).
@@ -22,6 +22,7 @@
 
 +!start : true <- 
 	.verbose(2); 
+	rjs.jia.log_beliefs;	
 	jia.robot.get_param("/guiding/perspective/robot_place", String, Rp);
 	+robot_place(Rp).
 
@@ -75,6 +76,7 @@
 	-finished;
 	.abolish(point_at(_));
 	.abolish(look_at(_));
+	.abolish(ttg(_));
 	-look_at(look).
 
 +!drop_current_task(ID, Subgoal, Failure, Code) : true <-
@@ -106,6 +108,13 @@
 	.abolish(_[ID]);
 	jia.qoi.reinit_qoi_variables;
 	.send(interac, untell, inTaskWith(Human,ID)).	
+	
++not_exp_ans(X) : X <3 <-
+	!speak(ID,not_understood(X)).
+
++not_exp_ans(X) : X == 3 <-
+	!speak(ID,not_understood(X));
+	!drop_current_task(ID, cannot_understand, cannot_understand, cannot_understand).
 
 +end_task(Status, ID)[ID] :  true <- 
 	?task(ID, _, Human, _); 
@@ -176,6 +185,7 @@
 +visible(target,_,true) : not step_agents_at_right_place_added <- +step_agents_at_right_place_added[ID]; jia.qoi.update_step(increment).
 +visible(direction,_,true) : not step_agents_at_right_place_added <- +step_agents_at_right_place_added[ID]; jia.qoi.update_step(increment).
 +target_explained : true <-  jia.qoi.update_step(increment).
++direction_said : true <-  jia.qoi.update_step(increment).
 +direction_explained : true <-  jia.qoi.update_step(increment).
 //+said(happy_end,_) : dir_to_point(D) & not ld_seen(D) <-  jia.qoi.update_step(increment).
 +ld_seen(_) : true  <- jia.qoi.update_step(increment).
@@ -183,6 +193,6 @@
 +started : true <- jia.qoi.executing_step(goal_nego).
 +target_verba : true <- jia.qoi.executing_step(target_explanation).
 +direction_verba : true <- jia.qoi.executing_step(direction_explanation).
-+said(cannot_tell_seen(_),0) : true <- jia.qoi.executing_step(landmark_seen).
-
++said(cannot_tell_seen(_),0) : true <- jia.qoi.executing_step(ask_landmark_seen).
++said(ask_understand,0) : true <- jia.qoi.executing_step(ask_understood).
 

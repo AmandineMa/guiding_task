@@ -73,7 +73,11 @@ public class qoi_to_file  extends DefaultInternalAction {
         		s_list.add(l.toString());
         	}
     	}
+    	((RobotAgArch) ts.getUserAgArch()).out_task.close();
+    	((RobotAgArch) ts.getUserAgArch()).out_action.close();
+    	((RobotAgArch) ts.getUserAgArch()).saveChart();
     	Files.write(path, s_list, StandardCharsets.UTF_8);
+    	
     	return true;
     }
 	
