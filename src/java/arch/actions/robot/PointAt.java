@@ -39,7 +39,7 @@ public class PointAt extends AbstractAction {
 			}
 		};
 		Map<String, Object> parameters = new HashMap<String, Object>();
-		parameters.put("point", rosnode.build_point_stamped(frame));
+		parameters.put("point", rosnode.buildPointStamped(frame));
 		parameters.put("withhead", with_head);
 		parameters.put("withbase", with_base);
 

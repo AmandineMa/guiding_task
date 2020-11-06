@@ -2,6 +2,8 @@ package arch.actions;
 
 import org.ros.node.topic.Publisher;
 
+import com.github.rosjava_actionlib.ActionClient;
+
 import arch.actions.internal.CanBeVisible;
 import arch.actions.internal.ComputeRoute;
 import arch.actions.internal.GetOntoIndividualInfo;
@@ -9,6 +11,7 @@ import arch.actions.internal.GetPlacements;
 import arch.actions.internal.GetRouteVerba;
 import arch.actions.internal.HasMesh;
 import arch.actions.internal.SetParam;
+import arch.actions.robot.DisplayOnTablet;
 import arch.actions.robot.EnableAnimatedSpeech;
 import arch.actions.robot.Engage;
 import arch.actions.robot.FaceHuman;
@@ -27,6 +30,9 @@ import arch.actions.robot.TextToSpeech;
 import arch.actions.ros.InitGuidingAs;
 import arch.actions.ros.SetGuidingResult;
 import arch.actions.ros.StartROSNode;
+import dialogue_as.dialogue_actionActionFeedback;
+import dialogue_as.dialogue_actionActionGoal;
+import dialogue_as.dialogue_actionActionResult;
 import jason.asSemantics.ActionExec;
 import rjs.arch.actions.AbstractActionFactory;
 import rjs.arch.actions.Action;
@@ -35,16 +41,19 @@ import rjs.arch.actions.ros.InitServices;
 import rjs.arch.actions.ros.RetryInitServices;
 import rjs.arch.actions.ros.StartParameterLoaderNode;
 import rjs.arch.agarch.AbstractROSAgArch;
+import rjs.utils.Tools;
 
 public class ActionFactoryImpl extends AbstractActionFactory {
 	
 	private static Publisher<std_msgs.String> lookAtEventsPub; 
 	private static Publisher<std_msgs.String> humanToMonitorPub; 
+	private static ActionClient<dialogue_actionActionGoal, dialogue_actionActionFeedback, dialogue_actionActionResult> dialogueActionClient;
 	
 	public void setRosVariables() {
 		super.setRosVariables();
 		lookAtEventsPub = createPublisher("guiding/topics/look_at_events");
 		humanToMonitorPub = createPublisher("guiding/topics/human_to_monitor");
+		dialogueActionClient = createActionClient("guiding/action_servers/dialogue",dialogue_actionActionGoal._TYPE,dialogue_actionActionFeedback._TYPE, dialogue_actionActionResult._TYPE);
 	}
 			
 	public Action createAction(ActionExec actionExec, AbstractROSAgArch rosAgArch) {
@@ -54,6 +63,9 @@ public class ActionFactoryImpl extends AbstractActionFactory {
 		switch(actionName) {
 			case "human_to_monitor" :
 				action = new HumanToMonitor(actionExec, rosAgArch, humanToMonitorPub);
+				break;
+			case "display_on_tablet":
+				action = new DisplayOnTablet(actionExec, rosAgArch);
 				break;
 			case "compute_route" :
 				action = new ComputeRoute(actionExec, rosAgArch);
@@ -92,7 +104,7 @@ public class ActionFactoryImpl extends AbstractActionFactory {
 				action = new TextToSpeech(actionExec, rosAgArch);
 				break;
 			case "listen":
-				action = new Listen(actionExec, rosAgArch);
+				action = new Listen(actionExec, rosAgArch,dialogueActionClient);
 				break;
 			case "get_route_verbalization":
 				action = new GetRouteVerba(actionExec, rosAgArch);

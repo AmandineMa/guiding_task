@@ -4,10 +4,14 @@ n(-1).
 
 
 +!start : true <- 
-	.verbose(2); 
+	.verbose(0); 
+//	display_on_tablet("I know where is the capsule.");
+	display_on_tablet("I know what is your next step.");
+	human_to_monitor("human_0");
 	rjs.jia.log_beliefs.
 
 @iE[atomic] +isAttentive(Human) : not inSession(_,_) & not localising<-
+//	display_on_tablet;
 	jia.qoi.store_attentive_times(T);
 	.concat("human_", Human, HTF);
 	human_to_monitor(HTF);
@@ -17,7 +21,8 @@ n(-1).
 	engage(N+1);
 	jia.robot.get_param("/guiding/dialogue/hwu", "Boolean", Dialogue);
 	if(Dialogue == false){
-		//text2speech(hello);
+		text2speech(hello);
+//		display_on_tablet(listening);
 	}.
 	
 -inTaskWith(Human,ID) : not  isPerceiving(_, Human)<- 
@@ -47,7 +52,7 @@ n(-1).
 		terminate_interaction(N);
 	}
 	!!clean_facts(Human);
-	!loca;
+//	!loca;
 	-bye.
 	
 +!bye(Human) : inTaskWith(_,_) <- true.
@@ -104,10 +109,10 @@ n(-1).
 +isPerceiving(_, 0) : true <-
 	human_to_monitor("human_0").
 
--isPerceiving(_, Human) : not inTaskWith(_,_) & inSession(Human,_) & not wait_human <-
-	+wait_human;
-	!wait_human(Human);
-	-wait_human.
+//-isPerceiving(_, Human) : not inTaskWith(_,_) & inSession(Human,_) & not wait_human <-
+//	+wait_human;
+//	!wait_human(Human);
+//	-wait_human.
 
 +!wait_human(Human) : true <-
 	.wait(isPerceiving(_,Human), 6000).
@@ -126,7 +131,7 @@ n(-1).
 		.send(robot, tell, preempted(ID));
 	}
 	!!clean_facts(Human);
-	!loca;
+//	!loca;
 	-bye.
 
 +!clean_facts(Human): true <-

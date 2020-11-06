@@ -1,8 +1,8 @@
 guiding:
   dialogue:
-    hwu: True
+    hwu: False
     
-  immo: True
+  immo: False
 
   base_services:
     get_route: 
@@ -44,6 +44,18 @@ guiding:
     speak_to: 
      name: /naoqi_driver/tts/say
      type: nao_interaction_msgs/Say
+    display_speech:
+     name: /web_view_node/start_speaking
+     type: nao_interaction_msgs/String
+    display_listening:
+     name: /web_view_node/start_listening
+     type: std_srvs/Empty
+    web_view_start_processing:
+     name: /web_view_node/start_processing
+     type: std_srvs/Empty
+    reset_tablet:
+     name: /web_view_node/reset
+     type: std_srvs/Empty
 
   services_moving:
     pointing_planner: 
@@ -64,17 +76,14 @@ guiding:
     terminate_interaction:
       name: /dialogue_arbiter/end_conv
       type: std_srvs/Empty      
-    web_view_start_processing:
-      name: /web_view_node/start_processing
-      type: std_srvs/Empty
     pause_asr:
       name: /mummer_asr/pause
       type: std_srvs/Empty
        
-#  services_wo_hwu:
-#     speak_to: 
-#       name: /naoqi_driver/tts/say
-#       type: nao_interaction_msgs/Say
+  services_wo_hwu:
+     speak_to: 
+       name: /naoqi_driver/tts/say
+       type: nao_interaction_msgs/Say
 
   topics:
     current_facts: /base/current_facts
@@ -86,6 +95,7 @@ guiding:
     terminate_interaction: /terminate_interaction/goal
     finished_talking: /mummer_dialogue_say/finished
     rating: /terminate_interaction/rating
+    ttg: /ttg
    
   action_servers:
     move_to: m_move_to

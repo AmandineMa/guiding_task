@@ -3,7 +3,6 @@ package ros;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Stack;
 import java.util.UUID;
@@ -36,10 +35,6 @@ import actionlib_msgs.GoalID;
 import actionlib_msgs.GoalStatus;
 import dialogue_arbiter.DialogueArbiterActionGoal;
 import dialogue_arbiter.DialogueArbiterGoal;
-import dialogue_as.dialogue_actionActionFeedback;
-import dialogue_as.dialogue_actionActionGoal;
-import dialogue_as.dialogue_actionActionResult;
-import dialogue_as.dialogue_actionGoal;
 import geometry_msgs.PoseStamped;
 import guiding_as_msgs.taskActionFeedback;
 import guiding_as_msgs.taskActionGoal;
@@ -64,7 +59,6 @@ import resource_synchronizer_msgs.MetaStateMachineHeader;
 import resource_synchronizer_msgs.SubStateMachineHeader;
 import rjs.ros.AbstractRosNode;
 import rjs.utils.SimpleFact;
-import rjs.utils.Tools;
 import rpn_recipe_planner_msgs.SupervisionServerInformActionGoal;
 import rpn_recipe_planner_msgs.SupervisionServerInformActionResult;
 import rpn_recipe_planner_msgs.SupervisionServerInformGoal;
@@ -90,21 +84,17 @@ public class RosNodeGuiding extends AbstractRosNode {
 	private Subscriber<perspectives_msgs.FactArrayStamped> factsSub;
 	private PointingActionResult placementsResult;
 	private PointingActionFeedback placementsFb;
-	private dialogue_actionActionResult listeningResult;
-	private dialogue_actionActionFeedback listeningFb;
 	private SupervisionServerInformActionResult listeningResultInform;
 	private SupervisionServerQueryActionResult listeningResultQuery;
 	private MoveBaseActionResult moveToResult;
 	private MoveBaseActionFeedback moveToFb;
 	private Publisher<MoveBaseActionGoal> moveToGoalPub;
-	private Publisher<dialogue_actionActionGoal> dialoguePub;
 	private Publisher<SupervisionServerInformActionGoal> dialoguePubInform;
 	private GoalID informGoalId;
 	private Publisher<GoalID> dialogueCancelPubInform;
 	private Publisher<SupervisionServerQueryActionGoal> dialoguePubQuery;
 	private GoalID queryGoalId;
 	private Publisher<GoalID> dialogueCancelPubQuery;
-	private Publisher<GoalID> dialogueCancelPub;
 	private Publisher<DialogueArbiterActionGoal> engagePub;
 	private Publisher<visualization_msgs.Marker> markerPub;
 	private Publisher<std_msgs.Int32> personOfInterestPub;
@@ -156,9 +146,9 @@ public class RosNodeGuiding extends AbstractRosNode {
 //			msc = new MasterStateClient(connectedNode, uri);
 //			serviceClients = new HashMap<String, ServiceClient<Message, Message>>();
 //			servicesMap = null;
+
 			super.init();
-			
-			goalIDGenerator = new GoalIDGenerator(getConnectedNode());
+			goalIDGenerator = new GoalIDGenerator(connectedNode);
 			tfl = new TransformListener(connectedNode);
 			
 			if(parameters.has("/guiding/base_services"))
@@ -182,7 +172,8 @@ public class RosNodeGuiding extends AbstractRosNode {
 			stackGuidingGoals = new Stack<taskActionGoal>();
 			markerPub = getConnectedNode().newPublisher("/pp_debug", visualization_msgs.Marker._TYPE);
 			personOfInterestPub = getConnectedNode().newPublisher(parameters.getString("/guiding/topics/person_of_interest"), std_msgs.Int32._TYPE);
-			guidingAS = new ActionServer<>(connectedNode, "/guiding_task", taskActionGoal._TYPE, taskActionFeedback._TYPE, taskActionResult._TYPE);
+			guidingAS = new ActionServer<taskActionGoal, taskActionFeedback, taskActionResult>(
+					connectedNode, "/guiding_task", taskActionGoal._TYPE, taskActionFeedback._TYPE, taskActionResult._TYPE);
 
 			if(parameters.has("/guiding/action_servers/move_to")) {
 				moveToGoalPub = connectedNode.newPublisher(
@@ -230,31 +221,6 @@ public class RosNodeGuiding extends AbstractRosNode {
 				
 			}
 			
-			if(parameters.has("/guiding/action_servers/dialogue") && !parameters.getBoolean("guiding/dialogue/hwu")) {
-				dialoguePub = connectedNode.newPublisher(
-						parameters.getString("/guiding/action_servers/dialogue") + "/goal", dialogue_actionActionGoal._TYPE);
-				dialogueCancelPub = connectedNode.newPublisher(
-						parameters.getString("/guiding/action_servers/dialogue") + "/cancel", GoalID._TYPE);
-				
-				MessageListener<dialogue_actionActionResult> ml_dialogue = new MessageListener<dialogue_actionActionResult>() {
-	
-					@Override
-					public void onNewMessage(dialogue_actionActionResult result) {
-						listeningResult = result;
-						if(result.getStatus().getStatus()==actionlib_msgs.GoalStatus.SUCCEEDED) {
-							logger.info("result succeeded :"+result.getResult().getSubject());
-						}	
-					}
-				};
-				addListenerResult("/guiding/action_servers/dialogue", dialogue_actionActionResult._TYPE, ml_dialogue);
-				MessageListener<dialogue_actionActionFeedback> ml_dialogue_fb = new MessageListener<dialogue_actionActionFeedback>() {
-					@Override
-					public void onNewMessage(dialogue_actionActionFeedback fb) {
-						listeningFb = fb;
-					}
-				};
-				addListenerFb("/guiding/action_servers/dialogue", dialogue_actionActionFeedback._TYPE, ml_dialogue_fb);
-			}
 			
 			if(parameters.has("/guiding/action_servers/engage")) {
 				engagePub = connectedNode.newPublisher(
@@ -476,34 +442,6 @@ public class RosNodeGuiding extends AbstractRosNode {
 		dialoguePubQuery.publish(listen_goal_msg);
 	}
 
-	public void callDialogueAS(List<String> subjects) {
-		callDialogueAS(subjects, new ArrayList<String>());
-	}
-	
-	public void callDialogueAS(List<String> subjects, List<String> verbs) {
-		listeningFb = null;
-		listeningResult = null;
-		dialogue_actionActionGoal listen_goal_msg = messageFactory.newFromType(dialogue_actionActionGoal._TYPE);
-		dialogue_actionGoal listen_goal = listen_goal_msg.getGoal();
-		if (!subjects.isEmpty()) {
-			listen_goal.setSubjects(subjects);
-		} else {
-			listen_goal.setEnableOnlyVerb(true);
-		}
-		if (!verbs.isEmpty()) {
-			listen_goal.setVerbs(verbs);
-		} else {
-			listen_goal.setEnableOnlySubject(true);
-		}
-		listen_goal_msg.setGoal(listen_goal);
-		GoalID goalID = messageFactory.newFromType(GoalID._TYPE);
-		goalID.setId("");
-		dialogueCancelPub.publish(goalID);
-		Tools.sleep(200);
-		dialoguePub.publish(listen_goal_msg);
-		logger.info("dialogue_as listening");
-	}
-	
 	public void setGuidingASListener(ActionServerListener<taskActionGoal> listener) {
 		guidingAS.attachListener(listener);
 	}
@@ -534,14 +472,6 @@ public class RosNodeGuiding extends AbstractRosNode {
 
 	public SupervisionServerQueryActionResult getListeningResultQuery() {
 		return listeningResultQuery;
-	}
-
-	public dialogue_actionActionResult getListeningResult() {
-		return listeningResult;
-	}
-
-	public dialogue_actionActionFeedback getListeningFb() {
-		return listeningFb;
 	}
 
 	public MoveBaseActionResult getMoveToResult() {

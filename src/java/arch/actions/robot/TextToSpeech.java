@@ -3,6 +3,9 @@ package arch.actions.robot;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.ros.exception.RemoteException;
+import org.ros.node.service.ServiceResponseListener;
+
 import actionlib_msgs.GoalStatus;
 import arch.agarch.AgArchGuiding;
 import arch.agarch.RobotAgArch;
@@ -17,11 +20,13 @@ import rjs.utils.Tools;
 import ros.RosNodeGuiding;
 import rpn_recipe_planner_msgs.SupervisionServerInformActionResult;
 import rpn_recipe_planner_msgs.SupervisionServerQueryActionResult;
+import std_srvs.EmptyResponse;
 
 public class TextToSpeech extends AbstractAction {
 	
 	String bel_functor;
 	String bel_arg;
+	static String explanation;
 	
 	public TextToSpeech(ActionExec actionExec, AbstractROSAgArch rosAgArch) {
 		super(actionExec, rosAgArch);
@@ -163,9 +168,36 @@ public class TextToSpeech extends AbstractAction {
 	public void textToSpeechHomeMade(String text) {
 		Map<String, Object> parameters = new HashMap<String, Object>();
 		parameters.put("text", text);
+		boolean isQuestion = text.contains("?") ? true : false;
+		if(rosAgArch instanceof RobotAgArch) {
+			if(!bel_functor.equals("where_are_u") && !bel_functor.equals("cannot_find") && !bel_functor.equals("going_to_move")
+					&& !bel_functor.contains("step") && !bel_functor.contains("closer") && !bel_functor.contains("come")
+					&& !bel_functor.contains("not_understood")) {
+				((RobotAgArch) rosAgArch).startAction(isQuestion);
+				((RobotAgArch) rosAgArch).setInQuestion(isQuestion);
+			}
+		}
+		ServiceResponseListener<nao_interaction_msgs.StringResponse> respListener = new ServiceResponseListener<nao_interaction_msgs.StringResponse>() {
+			@Override
+			public void onFailure(RemoteException e) {}
+
+			@Override
+			public void onSuccess(nao_interaction_msgs.StringResponse response) {logger.info("RETURN FROM "+text);}
+		};
+		Map<String, Object> parameters2 =  new HashMap<String, Object>();
+		parameters2.put("request", text);
+		rosnode.callAsyncService("display_speech", respListener,parameters2);
 		SayResponse speak_to_resp = rosnode.callSyncService("speak_to", parameters);
+		if(bel_functor.equals("happy_end")) {
+			parameters2.replace("request", explanation);
+			rosnode.callAsyncService("display_speech", respListener,parameters2);
+		}
 		actionExec.setResult(speak_to_resp != null);
-		((RobotAgArch) rosAgArch).endAction();
+		if(rosAgArch instanceof RobotAgArch && !isQuestion && !bel_functor.equals("where_are_u") && !bel_functor.equals("cannot_find") && !bel_functor.equals("going_to_move")
+				&& !bel_functor.contains("step") && !bel_functor.contains("closer") && !bel_functor.contains("come")
+				&& !bel_functor.contains("not_understood")) {
+			((RobotAgArch) rosAgArch).endAction();
+		}
 	}
 	
 	
@@ -173,13 +205,14 @@ public class TextToSpeech extends AbstractAction {
 		String text = "";
 		switch (bel_functor) {
 		case "hello":
-			text = new String("Hello ! Nice to meet you");
+//			text = new String("Hello, my name is Pepper ! Nice to meet you ! I can help you find your way to the capsule.");
+			text = new String("Hello again ! I know where is your next step. It is the drone arena.");
 			break;
 		case "goodbye":
 			text = new String("Goodbye");
 			break;
 		case "localising":
-			text = new String("I am going to my charging station now.");
+			text = new String("I am going to my base station now.");
 			break;
 		case "closer":
 			text = new String("Can you come closer, please");
@@ -222,12 +255,29 @@ public class TextToSpeech extends AbstractAction {
 			break;
 		case "route_verbalization":
 			text = bel_arg;
+			explanation = text;
 			break;
 		case "route_verbalization_n_vis":
 			text = "in this direction, " + bel_arg;
 			break;
 		case "no_place":
 			text = new String("The place you asked for does not exist");
+			break;
+		case "not_understood":
+			switch (bel_arg) {
+			case "0":
+				text = new String("I'm sorry, I did not understand what you said");
+				break;
+			case "1":
+				text = new String("I'm sorry again, I did not understand what you said, can you repeat please ?");
+				break;
+			case "2":
+				text = new String("Again sorry, I will try to understand one last time, then I will give up");
+				break;
+			case "3":
+				text = new String("Sorry, I give up the guiding task as I don't understand what you're saying");
+				break;
+			}
 			break;
 		case "get_attention":
 			text = new String("Hey are you listening");
@@ -306,7 +356,8 @@ public class TextToSpeech extends AbstractAction {
 			text = new String("Do you mean " + bel_arg + "?");
 			break;
 		case "happy_end":
-			text = new String("I am happy that I was able to help you.");
+//			text = new String("I am happy that I was able to help you. I hope you will find the capsule !");
+			text = new String("I am happy that I was able to help you. Good luck !");
 			break;
 		case "introduce":
 			text = new String("Hello, my name is Pepper. Today, I'm taking my guide exam at Ideapark. Can you come in front of me ? I'm going to show you what I can do.");

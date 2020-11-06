@@ -25,13 +25,7 @@ public class InitGuidingAs extends AbstractAction {
 		ActionServerListener<taskActionGoal> listener = new ActionServerListener<taskActionGoal>() {
 
 			@Override
-			public void goalReceived(taskActionGoal goal) {
-				GoalID goalID = goal.getGoalId();
-				if(goal.getGoalId().getId().isEmpty()) {
-					rosAgArch.getGoalIDGenerator().generateID(goalID);
-					goal.setGoalId(goalID);
-				}
-			}
+			public void goalReceived(taskActionGoal goal) {}
 
 			@Override
 			public void cancelReceived(GoalID id) {

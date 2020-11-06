@@ -14,7 +14,6 @@
 	startROSNodeGuiding;
 	initServices;
 	initGuidingAs; 
-	.print("started");
 //	.create_agent(test, "src/asl/test.asl", [agentArchClass("arch.InteractAgArch"), beliefBaseClass("agent.TimeBB")]).
 	.create_agent(interac, "src/asl/interac.asl", [agentArchClass("arch.agarch.InteractAgArch"), beliefBaseClass("rjs.agent.TimeBB"), agentClass("rjs.agent.LimitedAgent")]);
 	.create_agent(robot, "src/asl/robot.asl", [agentArchClass("arch.agarch.RobotAgArch"), beliefBaseClass("rjs.agent.TimeBB"), agentClass("rjs.agent.LimitedAgent")]).
