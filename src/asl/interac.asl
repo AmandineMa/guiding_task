@@ -5,8 +5,7 @@ n(-1).
 
 +!start : true <- 
 	.verbose(0); 
-//	display_on_tablet("I know where is the capsule.");
-	display_on_tablet("I know what is your next step.");
+	display_on_tablet("I can guide you.");
 	human_to_monitor("human_0");
 	rjs.jia.log_beliefs.
 

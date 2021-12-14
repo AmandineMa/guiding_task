@@ -205,8 +205,7 @@ public class TextToSpeech extends AbstractAction {
 		String text = "";
 		switch (bel_functor) {
 		case "hello":
-//			text = new String("Hello, my name is Pepper ! Nice to meet you ! I can help you find your way to the capsule.");
-			text = new String("Hello again ! I know where is your next step. It is the drone arena.");
+			text = new String("Hello, my name is Pepper ! Nice to meet you ! I can help you find your way in the lab.");
 			break;
 		case "goodbye":
 			text = new String("Goodbye");
